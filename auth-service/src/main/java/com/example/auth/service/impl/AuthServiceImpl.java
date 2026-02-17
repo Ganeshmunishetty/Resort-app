@@ -1,0 +1,159 @@
+package com.example.auth.service.impl;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.entity.Admin;
+import com.example.auth.entity.Owner;
+import com.example.auth.entity.User;
+import com.example.auth.enums.Status;
+import com.example.auth.exception.AuthException;
+import com.example.auth.exception.InvalidCredentialsException;
+import com.example.auth.exception.ResourceAlreadyExistsException;
+import com.example.auth.repository.AdminRepository;
+import com.example.auth.repository.OwnerRepository;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.security.jwt.JwtUtil;
+import com.example.auth.service.AuthService;
+import com.example.auth.util.PasswordValidator;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final OwnerRepository ownerRepository;
+    private final AdminRepository adminRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            OwnerRepository ownerRepository,
+            AdminRepository adminRepository,
+            PasswordEncoder passwordEncoder,
+            JwtUtil jwtUtil
+    ) {
+        this.userRepository = userRepository;
+        this.ownerRepository = ownerRepository;
+        this.adminRepository = adminRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
+    }
+
+    // ================= USER REGISTER =================
+    @Override
+    public void registerUser(RegisterRequestDTO request) {
+
+        validatePassword(request.getPassword());
+        ensureEmailIsUnique(request.getEmail());
+
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setName(request.getName());
+        user.setAge(request.getAge());
+        user.setPhone(request.getPhone());
+        user.setStatus(Status.ACTIVE);
+
+        userRepository.save(user);
+    }
+
+    // ================= OWNER REGISTER =================
+    @Override
+    public void registerOwner(RegisterRequestDTO request) {
+
+        validatePassword(request.getPassword());
+        ensureEmailIsUnique(request.getEmail());
+
+        Owner owner = new Owner();
+        owner.setEmail(request.getEmail());
+        owner.setPassword(passwordEncoder.encode(request.getPassword()));
+        owner.setName(request.getName());
+        owner.setAge(request.getAge());
+        owner.setPhone(request.getPhone());
+        owner.setStatus(Status.PENDING); // must be approved
+
+        ownerRepository.save(owner);
+    }
+
+    // ================= ADMIN REGISTER =================
+    @Override
+    public void registerAdmin(RegisterRequestDTO request) {
+
+        validatePassword(request.getPassword());
+        ensureEmailIsUnique(request.getEmail());
+
+        Admin admin = new Admin();
+        admin.setEmail(request.getEmail());
+        admin.setPassword(passwordEncoder.encode(request.getPassword()));
+        admin.setName(request.getName());
+        admin.setAge(request.getAge());
+        admin.setPhone(request.getPhone());
+
+        adminRepository.save(admin);
+    }
+
+    // ================= LOGIN =================
+    @Override
+    public AuthResponseDTO login(LoginRequestDTO request) {
+
+        // ---- ADMIN ----
+        Admin admin = adminRepository.findByEmail(request.getEmail()).orElse(null);
+        if (admin != null) {
+            verifyPassword(request.getPassword(), admin.getPassword());
+            String token = jwtUtil.generateToken(admin.getEmail(), "ADMIN");
+            return new AuthResponseDTO(token, "ADMIN");
+        }
+
+        // ---- USER ----
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user != null) {
+            verifyPassword(request.getPassword(), user.getPassword());
+            String token = jwtUtil.generateToken(user.getEmail(), "USER");
+            return new AuthResponseDTO(token, "USER");
+        }
+
+        // ---- OWNER ----
+        Owner owner = ownerRepository.findByEmail(request.getEmail()).orElse(null);
+        if (owner != null) {
+            verifyPassword(request.getPassword(), owner.getPassword());
+
+            if (owner.getStatus() != Status.ACTIVE) {
+                throw new AuthException("Owner account is not approved yet");
+            }
+
+            String token = jwtUtil.generateToken(owner.getEmail(), "OWNER");
+            return new AuthResponseDTO(token, "OWNER");
+        }
+
+        throw new InvalidCredentialsException("Invalid email or password");
+    }
+
+    // ================= PRIVATE HELPERS =================
+
+    private void validatePassword(String password) {
+        if (!PasswordValidator.isValid(password)) {
+            throw new AuthException(
+                "Password must contain uppercase, lowercase, number, special character and be at least 8 characters long"
+            );
+        }
+    }
+
+    private void ensureEmailIsUnique(String email) {
+        if (
+            userRepository.existsByEmail(email) ||
+            ownerRepository.existsByEmail(email) ||
+            adminRepository.existsByEmail(email)
+        ) {
+            throw new ResourceAlreadyExistsException("Email already exists");
+        }
+    }
+
+    private void verifyPassword(String rawPassword, String encodedPassword) {
+        if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+    }
+}

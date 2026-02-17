@@ -1,0 +1,132 @@
+package com.example.auth.service.impl;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.entity.Admin;
+import com.example.auth.entity.Owner;
+import com.example.auth.entity.User;
+import com.example.auth.enums.Role;
+import com.example.auth.enums.Status;
+import com.example.auth.exception.AuthException;
+import com.example.auth.exception.InvalidCredentialsException;
+import com.example.auth.exception.ResourceAlreadyExistsException;
+import com.example.auth.repository.AdminRepository;
+import com.example.auth.repository.OwnerRepository;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.security.jwt.JwtUtil;
+import com.example.auth.service.AuthService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final OwnerRepository ownerRepository;
+    private final AdminRepository adminRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            OwnerRepository ownerRepository,
+            AdminRepository adminRepository,
+            PasswordEncoder passwordEncoder,
+            JwtUtil jwtUtil
+    ) {
+        this.userRepository = userRepository;
+        this.ownerRepository = ownerRepository;
+        this.adminRepository = adminRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
+    }
+
+    // ================= REGISTER =================
+
+    private void ensureEmailIsUnique(String email) {
+        if (
+            userRepository.existsByEmail(email) ||
+            ownerRepository.existsByEmail(email) ||
+            adminRepository.existsByEmail(email)
+        ) {
+            throw new ResourceAlreadyExistsException("Email already registered");
+        }
+    }
+
+    @Override
+    public void registerUser(RegisterRequestDTO request) {
+        ensureEmailIsUnique(request.getEmail());
+
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setStatus(Status.ACTIVE);
+
+        userRepository.save(user);
+    }
+
+    @Override
+    public void registerOwner(RegisterRequestDTO request) {
+        ensureEmailIsUnique(request.getEmail());
+
+        Owner owner = new Owner();
+        owner.setEmail(request.getEmail());
+        owner.setPassword(passwordEncoder.encode(request.getPassword()));
+        owner.setStatus(Status.PENDING);
+
+        ownerRepository.save(owner);
+    }
+
+    @Override
+    public void registerAdmin(RegisterRequestDTO request) {
+        ensureEmailIsUnique(request.getEmail());
+
+        Admin admin = new Admin();
+        admin.setEmail(request.getEmail());
+        admin.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        adminRepository.save(admin);
+    }
+
+    // ================= LOGIN =================
+
+    @Override
+    public AuthResponseDTO login(LoginRequestDTO request) {
+
+        Admin admin = adminRepository.findByEmail(request.getEmail()).orElse(null);
+        if (admin != null && passwordEncoder.matches(request.getPassword(), admin.getPassword())) {
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(admin.getEmail(), Role.ADMIN.name()),
+                    Role.ADMIN.name()
+            );
+        }
+
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user != null && passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(user.getEmail(), Role.USER.name()),
+                    Role.USER.name()
+            );
+        }
+
+        Owner owner = ownerRepository.findByEmail(request.getEmail()).orElse(null);
+        if (owner != null) {
+
+            if (!passwordEncoder.matches(request.getPassword(), owner.getPassword())) {
+                throw new InvalidCredentialsException("Invalid credentials");
+            }
+
+            if (owner.getStatus() != Status.ACTIVE) {
+                throw new AuthException("Owner not approved");
+            }
+
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(owner.getEmail(), Role.OWNER.name()),
+                    Role.OWNER.name()
+            );
+        }
+
+        throw new InvalidCredentialsException("Invalid credentials");
+    }
+}

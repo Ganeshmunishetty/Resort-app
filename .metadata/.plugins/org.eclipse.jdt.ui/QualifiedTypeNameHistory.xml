@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<qualifiedTypeNameHistroy>
+    <fullyQualifiedTypeName name="com.example.auth.entity.User"/>
+    <fullyQualifiedTypeName name="org.springframework.data.jpa.repository.JpaRepository"/>
+    <fullyQualifiedTypeName name="org.springframework.boot.autoconfigure.kafka.KafkaProperties.Admin"/>
+    <fullyQualifiedTypeName name="java.util.Optional"/>
+    <fullyQualifiedTypeName name="com.propertyplatform.auth.enums.Status"/>
+    <fullyQualifiedTypeName name="com.example.auth.enums.Status"/>
+    <fullyQualifiedTypeName name="com.example.auth.enums.Role"/>
+    <fullyQualifiedTypeName name="com.example.auth.security.jwt.JwtUtil"/>
+    <fullyQualifiedTypeName name="org.springframework.security.config.annotation.web.configuration.EnableWebSecurity"/>
+    <fullyQualifiedTypeName name="com.example.auth.exception.ResourceAlreadyExistsException"/>
+    <fullyQualifiedTypeName name="com.example.auth.exception.InvalidCredentialsException"/>
+    <fullyQualifiedTypeName name="com.example.auth.exception.AuthException"/>
+</qualifiedTypeNameHistroy>

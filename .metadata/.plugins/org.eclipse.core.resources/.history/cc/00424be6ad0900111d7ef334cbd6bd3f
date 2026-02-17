@@ -1,0 +1,24 @@
+package com.propertyplatform.auth.entity;
+
+import com.propertyplatform.auth.enums.Role;
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "admins")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Admin extends BaseEntity {
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @Column(nullable = false)
+    private String password;
+
+    @Enumerated(EnumType.STRING)
+    private Role role = Role.ADMIN;
+}

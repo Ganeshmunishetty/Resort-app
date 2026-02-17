@@ -1,0 +1,115 @@
+package com.example.auth.service.impl;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.entity.Admin;
+import com.example.auth.entity.Owner;
+import com.example.auth.entity.User;
+import com.example.auth.enums.Role;
+import com.example.auth.enums.Status;
+import com.example.auth.repository.AdminRepository;
+import com.example.auth.repository.OwnerRepository;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.service.AuthService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final OwnerRepository ownerRepository;
+    private final AdminRepository adminRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    // ✅ MANUAL CONSTRUCTOR (NO LOMBOK)
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            OwnerRepository ownerRepository,
+            AdminRepository adminRepository,
+            PasswordEncoder passwordEncoder
+    ) {
+        this.userRepository = userRepository;
+        this.ownerRepository = ownerRepository;
+        this.adminRepository = adminRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void registerUser(RegisterRequestDTO request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("User already exists");
+        }
+
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setStatus(Status.ACTIVE);
+
+        userRepository.save(user);
+    }
+
+    @Override
+    public void registerOwner(RegisterRequestDTO request) {
+        if (ownerRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Owner already exists");
+        }
+
+        Owner owner = new Owner();
+        owner.setEmail(request.getEmail());
+        owner.setPassword(passwordEncoder.encode(request.getPassword()));
+        owner.setStatus(Status.PENDING);
+
+        ownerRepository.save(owner);
+    }
+
+    @Override
+    public void registerAdmin(RegisterRequestDTO request) {
+        if (adminRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Admin already exists");
+        }
+
+        Admin admin = new Admin();
+        admin.setEmail(request.getEmail());
+        admin.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        adminRepository.save(admin);
+    }
+
+    @Override
+    public AuthResponseDTO login(LoginRequestDTO request) {
+
+        // ADMIN
+        Admin admin = adminRepository.findByEmail(request.getEmail()).orElse(null);
+        if (admin != null) {
+            if (!passwordEncoder.matches(request.getPassword(), admin.getPassword())) {
+                throw new RuntimeException("Invalid credentials");
+            }
+            return new AuthResponseDTO(null, Role.ADMIN.name());
+        }
+
+        // USER
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user != null) {
+            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                throw new RuntimeException("Invalid credentials");
+            }
+            return new AuthResponseDTO(null, Role.USER.name());
+        }
+
+        // OWNER
+        Owner owner = ownerRepository.findByEmail(request.getEmail()).orElse(null);
+        if (owner != null) {
+            if (!passwordEncoder.matches(request.getPassword(), owner.getPassword())) {
+                throw new RuntimeException("Invalid credentials");
+            }
+            if (owner.getStatus() != Status.ACTIVE) {
+                throw new RuntimeException("Owner not approved");
+            }
+            return new AuthResponseDTO(null, Role.OWNER.name());
+        }
+
+        throw new RuntimeException("Invalid credentials");
+    }
+}
