@@ -1,0 +1,25 @@
+spring.application.name=auth-service
+server.port=8080
+
+# Database
+spring.datasource.url=jdbc:mysql://localhost:3306/auth_service_db
+spring.datasource.username=root
+spring.datasource.password=MMnandish@97
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+# JPA
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# JWT - WITH DEFAULT
+jwt.secret=mySuperSecretKeyThatIsAtLeast32CharsLongForHS256AndSafeForDev987654321
+jwt.expiration=3600000
+
+# Swagger
+springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.api-docs.path=/v3/api-docs
+
+# REMOVE THESE LINES COMPLETELY:
+# spring.security.user.name=yourusername
+# spring.security.user.password=yourpassword

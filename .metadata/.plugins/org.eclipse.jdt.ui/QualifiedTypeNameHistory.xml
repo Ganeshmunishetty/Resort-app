@@ -6,10 +6,17 @@
     <fullyQualifiedTypeName name="java.util.Optional"/>
     <fullyQualifiedTypeName name="com.propertyplatform.auth.enums.Status"/>
     <fullyQualifiedTypeName name="com.example.auth.enums.Status"/>
-    <fullyQualifiedTypeName name="com.example.auth.enums.Role"/>
     <fullyQualifiedTypeName name="com.example.auth.security.jwt.JwtUtil"/>
-    <fullyQualifiedTypeName name="org.springframework.security.config.annotation.web.configuration.EnableWebSecurity"/>
     <fullyQualifiedTypeName name="com.example.auth.exception.ResourceAlreadyExistsException"/>
     <fullyQualifiedTypeName name="com.example.auth.exception.InvalidCredentialsException"/>
     <fullyQualifiedTypeName name="com.example.auth.exception.AuthException"/>
+    <fullyQualifiedTypeName name="com.example.auth.util.PasswordValidator"/>
+    <fullyQualifiedTypeName name="org.springframework.security.config.annotation.web.configuration.EnableWebSecurity"/>
+    <fullyQualifiedTypeName name="java.time.Period"/>
+    <fullyQualifiedTypeName name="java.time.LocalDate"/>
+    <fullyQualifiedTypeName name="org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity"/>
+    <fullyQualifiedTypeName name="org.springframework.core.annotation.Order"/>
+    <fullyQualifiedTypeName name="org.springframework.security.core.userdetails.UserDetailsService"/>
+    <fullyQualifiedTypeName name="com.example.auth.enums.Gender"/>
+    <fullyQualifiedTypeName name="com.example.auth.enums.Role"/>
 </qualifiedTypeNameHistroy>

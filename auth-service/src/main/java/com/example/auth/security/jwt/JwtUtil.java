@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
-
 @Component
 public class JwtUtil {
 
@@ -18,14 +17,13 @@ public class JwtUtil {
     private final long expirationTime;
 
     public JwtUtil(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration}") long expirationTime
+            @Value("${security.jwt.secret}") String secret,
+            @Value("${security.jwt.expiration-ms}") long expirationTime
     ) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes());
         this.expirationTime = expirationTime;
     }
 
-    // ================= GENERATE TOKEN =================
     public String generateToken(String email, String role) {
         return Jwts.builder()
                 .setSubject(email)
@@ -36,7 +34,6 @@ public class JwtUtil {
                 .compact();
     }
 
-    // ================= VALIDATE TOKEN =================
     public boolean validateToken(String token) {
         try {
             extractAllClaims(token);

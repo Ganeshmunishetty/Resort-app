@@ -1,76 +1,98 @@
 package com.example.auth.entity;
 
+import com.example.auth.enums.Gender;
 import com.example.auth.enums.Status;
-
 import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.Period;
 
 @Entity
 @Table(name = "admins")
 public class Admin extends BaseEntity {
+	@Column(unique = true, nullable = false)
+	private String email;
 
-	  @Column(unique = true, nullable = false)
-	    private String email;
+	@Column(nullable = false)
+	private String password;
 
-	    @Column(nullable = false)
-	    private String password;
+	@Column(nullable = false)
+	private String name;
 
-	    @Column(nullable = false)
-	    private String name;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private Gender gender;
 
-	    @Column(nullable = false)
-	    private Integer age;
 
-	    @Column(nullable = false)
-	    private String phone;
+	@Column(nullable = false)
+	private LocalDate dateOfBirth; // NEW
 
-	    @Enumerated(EnumType.STRING)
-	    private Status status;
+	@Column(nullable = false)
+	private String phone;
 
-		public String getEmail() {
-			return email;
-		}
+	@Enumerated(EnumType.STRING)
+	private Status status;
 
-		public void setEmail(String email) {
-			this.email = email;
-		}
+	// ========== CALCULATED AGE ==========
+	@Transient
+	public Integer getAge() {
+		return dateOfBirth != null ? Period.between(dateOfBirth, LocalDate.now()).getYears() : null;
+	}
 
-		public String getPassword() {
-			return password;
-		}
+	// ========== GETTERS/SETTERS ==========
+	public String getEmail() {
+		return email;
+	}
 
-		public void setPassword(String password) {
-			this.password = password;
-		}
+	public void setEmail(String email) {
+		this.email = email;
+	}
 
-		public String getName() {
-			return name;
-		}
+	public String getPassword() {
+		return password;
+	}
 
-		public void setName(String name) {
-			this.name = name;
-		}
+	public void setPassword(String password) {
+		this.password = password;
+	}
 
-		public Integer getAge() {
-			return age;
-		}
+	public String getName() {
+		return name;
+	}
 
-		public void setAge(Integer age) {
-			this.age = age;
-		}
+	public void setName(String name) {
+		this.name = name;
+	}
 
-		public String getPhone() {
-			return phone;
-		}
 
-		public void setPhone(String phone) {
-			this.phone = phone;
-		}
+	public Gender getGender() {
+		return gender;
+	}
 
-		public Status getStatus() {
-			return status;
-		}
+	public void setGender(Gender gender) {
+		this.gender = gender;
+	}
 
-		public void setStatus(Status status) {
-			this.status = status;
-		}
+	public LocalDate getDateOfBirth() {
+		return dateOfBirth;
+	}
+
+	public void setDateOfBirth(LocalDate dateOfBirth) {
+		this.dateOfBirth = dateOfBirth;
+	}
+
+	public String getPhone() {
+		return phone;
+	}
+
+	public void setPhone(String phone) {
+		this.phone = phone;
+	}
+
+	public Status getStatus() {
+		return status;
+	}
+
+	public void setStatus(Status status) {
+		this.status = status;
+	}
 }

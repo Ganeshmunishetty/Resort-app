@@ -19,6 +19,9 @@ import com.example.auth.util.PasswordValidator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.Period;
+
 @Service
 public class AuthServiceImpl implements AuthService {
 
@@ -42,55 +45,41 @@ public class AuthServiceImpl implements AuthService {
         this.jwtUtil = jwtUtil;
     }
 
-    // ================= USER REGISTER =================
+    // ================= REGISTER USER =================
     @Override
     public void registerUser(RegisterRequestDTO request) {
-
-        validatePassword(request.getPassword());
+        validateRegistration(request);
         ensureEmailIsUnique(request.getEmail());
 
         User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setName(request.getName());
-        user.setAge(request.getAge());
-        user.setPhone(request.getPhone());
+        mapDtoToUser(user, request);
         user.setStatus(Status.ACTIVE);
 
         userRepository.save(user);
     }
 
-    // ================= OWNER REGISTER =================
+    // ================= REGISTER OWNER =================
     @Override
     public void registerOwner(RegisterRequestDTO request) {
-
-        validatePassword(request.getPassword());
+        validateRegistration(request);
         ensureEmailIsUnique(request.getEmail());
 
         Owner owner = new Owner();
-        owner.setEmail(request.getEmail());
-        owner.setPassword(passwordEncoder.encode(request.getPassword()));
-        owner.setName(request.getName());
-        owner.setAge(request.getAge());
-        owner.setPhone(request.getPhone());
-        owner.setStatus(Status.PENDING); // must be approved
+        mapDtoToOwner(owner, request);
+        owner.setStatus(Status.PENDING);
 
         ownerRepository.save(owner);
     }
 
-    // ================= ADMIN REGISTER =================
+    // ================= REGISTER ADMIN =================
     @Override
     public void registerAdmin(RegisterRequestDTO request) {
-
-        validatePassword(request.getPassword());
+        validateRegistration(request);
         ensureEmailIsUnique(request.getEmail());
 
         Admin admin = new Admin();
-        admin.setEmail(request.getEmail());
-        admin.setPassword(passwordEncoder.encode(request.getPassword()));
-        admin.setName(request.getName());
-        admin.setAge(request.getAge());
-        admin.setPhone(request.getPhone());
+        mapDtoToAdmin(admin, request);
+        admin.setStatus(Status.ACTIVE);
 
         adminRepository.save(admin);
     }
@@ -99,61 +88,107 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponseDTO login(LoginRequestDTO request) {
 
-        // ---- ADMIN ----
         Admin admin = adminRepository.findByEmail(request.getEmail()).orElse(null);
-        if (admin != null) {
-            verifyPassword(request.getPassword(), admin.getPassword());
-            String token = jwtUtil.generateToken(admin.getEmail(), "ADMIN");
-            return new AuthResponseDTO(token, "ADMIN");
+        if (admin != null && passwordEncoder.matches(request.getPassword(), admin.getPassword())) {
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(admin.getEmail(), "ADMIN"),
+                    "ADMIN"
+            );
         }
 
-        // ---- USER ----
         User user = userRepository.findByEmail(request.getEmail()).orElse(null);
-        if (user != null) {
-            verifyPassword(request.getPassword(), user.getPassword());
-            String token = jwtUtil.generateToken(user.getEmail(), "USER");
-            return new AuthResponseDTO(token, "USER");
+        if (user != null && passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(user.getEmail(), "USER"),
+                    "USER"
+            );
         }
 
-        // ---- OWNER ----
         Owner owner = ownerRepository.findByEmail(request.getEmail()).orElse(null);
         if (owner != null) {
-            verifyPassword(request.getPassword(), owner.getPassword());
-
+            if (!passwordEncoder.matches(request.getPassword(), owner.getPassword())) {
+                throw new InvalidCredentialsException("Invalid email or password");
+            }
             if (owner.getStatus() != Status.ACTIVE) {
                 throw new AuthException("Owner account is not approved yet");
             }
-
-            String token = jwtUtil.generateToken(owner.getEmail(), "OWNER");
-            return new AuthResponseDTO(token, "OWNER");
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(owner.getEmail(), "OWNER"),
+                    "OWNER"
+            );
         }
 
         throw new InvalidCredentialsException("Invalid email or password");
     }
 
+    // ================= LOGOUT =================
+    /**
+     * JWT is stateless.
+     * For now, logout is handled client-side by deleting the token.
+     * (Refresh-token support can be added later)
+     */
+    @Override
+    public void logout(String token) {
+        // No-op for now (stateless JWT)
+    }
+
     // ================= PRIVATE HELPERS =================
 
-    private void validatePassword(String password) {
-        if (!PasswordValidator.isValid(password)) {
+    private void validateRegistration(RegisterRequestDTO request) {
+
+        if (!PasswordValidator.isValid(request.getPassword())) {
             throw new AuthException(
-                "Password must contain uppercase, lowercase, number, special character and be at least 8 characters long"
+                    "Password must contain uppercase, lowercase, number and special character (min 8 chars)"
             );
+        }
+
+        if (request.getGender() == null) {
+            throw new AuthException("Gender is required");
+        }
+
+        LocalDate dob = request.getDateOfBirth();
+        if (dob == null || dob.isAfter(LocalDate.now())) {
+            throw new AuthException("Valid date of birth required");
+        }
+
+        int age = Period.between(dob, LocalDate.now()).getYears();
+        if (age < 18) {
+            throw new AuthException("Must be at least 18 years old");
         }
     }
 
     private void ensureEmailIsUnique(String email) {
-        if (
-            userRepository.existsByEmail(email) ||
-            ownerRepository.existsByEmail(email) ||
-            adminRepository.existsByEmail(email)
-        ) {
+        if (userRepository.existsByEmail(email)
+                || ownerRepository.existsByEmail(email)
+                || adminRepository.existsByEmail(email)) {
             throw new ResourceAlreadyExistsException("Email already exists");
         }
     }
 
-    private void verifyPassword(String rawPassword, String encodedPassword) {
-        if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
-            throw new InvalidCredentialsException("Invalid email or password");
-        }
+    private void mapDtoToUser(User user, RegisterRequestDTO dto) {
+        user.setEmail(dto.getEmail());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setName(dto.getName());
+        user.setGender(dto.getGender());
+        user.setDateOfBirth(dto.getDateOfBirth());
+        user.setPhone(dto.getPhone());
+    }
+
+    private void mapDtoToOwner(Owner owner, RegisterRequestDTO dto) {
+        owner.setEmail(dto.getEmail());
+        owner.setPassword(passwordEncoder.encode(dto.getPassword()));
+        owner.setName(dto.getName());
+        owner.setGender(dto.getGender());
+        owner.setDateOfBirth(dto.getDateOfBirth());
+        owner.setPhone(dto.getPhone());
+    }
+
+    private void mapDtoToAdmin(Admin admin, RegisterRequestDTO dto) {
+        admin.setEmail(dto.getEmail());
+        admin.setPassword(passwordEncoder.encode(dto.getPassword()));
+        admin.setName(dto.getName());
+        admin.setGender(dto.getGender());
+        admin.setDateOfBirth(dto.getDateOfBirth());
+        admin.setPhone(dto.getPhone());
     }
 }

@@ -1,0 +1,151 @@
+
+package com.example.auth.service.impl;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.entity.Admin;
+import com.example.auth.entity.Owner;
+import com.example.auth.entity.User;
+import com.example.auth.enums.Status;
+import com.example.auth.exception.AuthException;
+import com.example.auth.exception.InvalidCredentialsException;
+import com.example.auth.exception.ResourceAlreadyExistsException;
+import com.example.auth.repository.AdminRepository;
+import com.example.auth.repository.OwnerRepository;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.security.jwt.JwtUtil;
+import com.example.auth.service.AuthService;
+import com.example.auth.util.PasswordValidator;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import java.time.LocalDate;
+import java.time.Period;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+    private final UserRepository userRepository;
+    private final OwnerRepository ownerRepository;
+    private final AdminRepository adminRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
+
+    public AuthServiceImpl(UserRepository userRepository, OwnerRepository ownerRepository, 
+                          AdminRepository adminRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+        this.userRepository = userRepository;
+        this.ownerRepository = ownerRepository;
+        this.adminRepository = adminRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
+    }
+
+    @Override
+    public void registerUser(RegisterRequestDTO request) {
+        validateRegistration(request);
+        ensureEmailIsUnique(request.getEmail());
+
+        User user = new User();
+        mapDtoToUser(user, request);
+        user.setStatus(Status.ACTIVE);
+        userRepository.save(user);
+    }
+
+    @Override
+    public void registerOwner(RegisterRequestDTO request) {
+        validateRegistration(request);
+        ensureEmailIsUnique(request.getEmail());
+
+        Owner owner = new Owner();
+        mapDtoToOwner(owner, request);
+        owner.setStatus(Status.PENDING);
+        ownerRepository.save(owner);
+    }
+
+    @Override
+    public void registerAdmin(RegisterRequestDTO request) {
+        validateRegistration(request);
+        ensureEmailIsUnique(request.getEmail());
+
+        Admin admin = new Admin();
+        mapDtoToAdmin(admin, request);
+        admin.setStatus(Status.ACTIVE);
+        adminRepository.save(admin);
+    }
+
+    @Override
+    public AuthResponseDTO login(LoginRequestDTO request) {
+        Admin admin = adminRepository.findByEmail(request.getEmail()).orElse(null);
+        if (admin != null && passwordEncoder.matches(request.getPassword(), admin.getPassword())) {
+            return new AuthResponseDTO(jwtUtil.generateToken(admin.getEmail(), "ADMIN"), "ADMIN");
+        }
+
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user != null && passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            return new AuthResponseDTO(jwtUtil.generateToken(user.getEmail(), "USER"), "USER");
+        }
+
+        Owner owner = ownerRepository.findByEmail(request.getEmail()).orElse(null);
+        if (owner != null) {
+            if (!passwordEncoder.matches(request.getPassword(), owner.getPassword())) {
+                throw new InvalidCredentialsException("Invalid email or password");
+            }
+            if (owner.getStatus() != Status.ACTIVE) {
+                throw new AuthException("Owner account is not approved yet");
+            }
+            return new AuthResponseDTO(jwtUtil.generateToken(owner.getEmail(), "OWNER"), "OWNER");
+        }
+
+        throw new InvalidCredentialsException("Invalid email or password");
+    }
+
+    // ========== PRIVATE HELPERS ==========
+    private void validateRegistration(RegisterRequestDTO request) {
+        if (!PasswordValidator.isValid(request.getPassword())) {
+            throw new AuthException("Password must contain uppercase, lowercase, number, special char (8+ chars)");
+        }
+        if (!("MALE".equalsIgnoreCase(request.getGender()) || "FEMALE".equalsIgnoreCase(request.getGender()))) {
+            throw new AuthException("Gender must be MALE or FEMALE");
+        }
+        LocalDate dob = request.getDateOfBirth();
+        if (dob == null || dob.isAfter(LocalDate.now())) {
+            throw new AuthException("Valid date of birth required");
+        }
+        int age = Period.between(dob, LocalDate.now()).getYears();
+        if (age < 18) {
+            throw new AuthException("Must be at least 18 years old");
+        }
+    }
+
+    private void ensureEmailIsUnique(String email) {
+        if (userRepository.existsByEmail(email) || ownerRepository.existsByEmail(email) || adminRepository.existsByEmail(email)) {
+            throw new ResourceAlreadyExistsException("Email already exists");
+        }
+    }
+
+    private void mapDtoToUser(User user, RegisterRequestDTO dto) {
+        user.setEmail(dto.getEmail());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setName(dto.getName());
+        user.setGender(dto.getGender());
+        user.setDateOfBirth(dto.getDateOfBirth());
+        user.setPhone(dto.getPhone());
+    }
+
+    private void mapDtoToOwner(Owner owner, RegisterRequestDTO dto) {
+    	owner.setEmail(dto.getEmail());
+    	owner.setPassword(passwordEncoder.encode(dto.getPassword()));
+    	owner.setName(dto.getName());
+        owner.setGender(dto.getGender());
+        owner.setDateOfBirth(dto.getDateOfBirth());
+        owner.setPhone(dto.getPhone());
+    }
+
+    private void mapDtoToAdmin(Admin admin, RegisterRequestDTO dto) {
+    	admin.setEmail(dto.getEmail());
+    	admin.setPassword(passwordEncoder.encode(dto.getPassword()));
+        admin.setName(dto.getName());
+        admin.setGender(dto.getGender());
+        admin.setDateOfBirth(dto.getDateOfBirth());
+        admin.setPhone(dto.getPhone());
+    }
+}

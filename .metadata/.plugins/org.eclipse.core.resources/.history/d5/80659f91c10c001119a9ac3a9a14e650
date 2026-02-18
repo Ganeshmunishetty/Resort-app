@@ -1,0 +1,131 @@
+package com.example.auth.service.impl;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.dto.TokenRefreshResponse;
+import com.example.auth.entity.RefreshToken;
+import com.example.auth.entity.User;
+import com.example.auth.enums.Role;
+import com.example.auth.enums.Status;
+import com.example.auth.exception.AuthException;
+import com.example.auth.exception.InvalidCredentialsException;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.security.jwt.JwtUtil;
+import com.example.auth.service.AuthService;
+import com.example.auth.service.RefreshTokenService;
+import com.example.auth.util.PasswordValidator;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final RefreshTokenService refreshTokenService;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            RefreshTokenService refreshTokenService,
+            PasswordEncoder passwordEncoder,
+            JwtUtil jwtUtil
+    ) {
+        this.userRepository = userRepository;
+        this.refreshTokenService = refreshTokenService;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
+    }
+
+    // ========= COMMON REGISTRATION LOGIC =========
+    private void register(RegisterRequestDTO request, Role role) {
+
+        if (!PasswordValidator.isValid(request.getPassword())) {
+            throw new AuthException(
+                    "Password must contain uppercase, lowercase, number and special character"
+            );
+        }
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new AuthException("Email already exists");
+        }
+
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setName(request.getName());
+        user.setGender(request.getGender());
+        user.setDateOfBirth(request.getDateOfBirth());
+        user.setPhone(request.getPhone());
+        user.setRole(role);
+        user.setStatus(Status.ACTIVE);
+
+        userRepository.save(user);
+    }
+
+    @Override
+    public void registerUser(RegisterRequestDTO request) {
+        register(request, Role.USER);
+    }
+
+    @Override
+    public void registerOwner(RegisterRequestDTO request) {
+        register(request, Role.OWNER);
+    }
+
+    @Override
+    public void registerAdmin(RegisterRequestDTO request) {
+        register(request, Role.ADMIN);
+    }
+
+    // ================= LOGIN =================
+    @Override
+    public AuthResponseDTO login(LoginRequestDTO request) {
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
+
+        String accessToken = jwtUtil.generateToken(
+                user.getEmail(),
+                user.getRole().name()
+        );
+
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+
+        return new AuthResponseDTO(
+                accessToken,
+                refreshToken.getToken(),
+                user.getRole().name()
+        );
+    }
+
+    // ================= REFRESH =================
+    @Override
+    public TokenRefreshResponse refreshToken(String token) {
+
+        RefreshToken refreshToken =
+                refreshTokenService.verifyExpiration(
+                        refreshTokenService.findByToken(token)
+                );
+
+        User user = refreshToken.getUser();
+
+        String newAccessToken = jwtUtil.generateToken(
+                user.getEmail(),
+                user.getRole().name()
+        );
+
+        return new TokenRefreshResponse(newAccessToken);
+    }
+
+    // ================= LOGOUT =================
+    @Override
+    public void logout(String refreshToken) {
+        refreshTokenService.deleteByToken(refreshToken);
+    }
+}

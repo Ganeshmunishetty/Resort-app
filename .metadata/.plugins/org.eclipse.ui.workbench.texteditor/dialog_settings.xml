@@ -6,8 +6,10 @@
 		<item key="wholeword" value="false"/>
 		<item key="incremental" value="false"/>
 		<item key="isRegEx" value="false"/>
-		<item key="selection" value=""/>
+		<item key="selection" value="${jwt.secret}"/>
 		<list key="findhistory">
+			<item value="${jwt.secret}"/>
+			<item value="jwt.secret"/>
 			<item value="SimpleGranted"/>
 			<item value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;"/>
 		</list>
