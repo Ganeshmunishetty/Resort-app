@@ -1,0 +1,1341 @@
+package com.example.auth;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AuthServiceApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(AuthServiceApplication.class, args);
+	}
+
+}
+package com.example.auth.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class CorsConfig {
+
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**")
+                        .allowedOrigins("*") // restrict in prod
+                        .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
+                        .allowedHeaders("*");
+            }
+        };
+    }
+}
+package com.example.auth.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+public class PasswordEncoderConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+package com.example.auth.config;
+
+import com.example.auth.security.jwt.JwtAuthFilter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity  // ADD THIS
+public class SecurityConfig {
+
+    private final JwtAuthFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
+
+    @Bean
+    @Order(1)  // ADD THIS - Higher priority than auto-config
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/**")  // ADD THIS - Match all requests
+            .csrf(csrf -> csrf.disable())
+            .formLogin(form -> form.disable())
+            .httpBasic(basic -> basic.disable())
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/user/**").hasRole("USER")
+                .requestMatchers("/owner/**").hasRole("OWNER")
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+}
+
+package com.example.auth.config;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class SwaggerConfig {
+
+    @Bean
+    public OpenAPI openAPI() {
+
+        SecurityScheme securityScheme = new SecurityScheme()
+                .type(SecurityScheme.Type.HTTP)
+                .scheme("bearer")
+                .bearerFormat("JWT");
+
+        return new OpenAPI()
+                .info(new Info()
+                        .title("Auth Service API")
+                        .version("1.0")
+                        .description("JWT Authentication Service"))
+                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
+                .schemaRequirement("bearerAuth", securityScheme);
+    }
+}
+package com.example.auth.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/admin")
+public class AdminController {
+
+    @GetMapping("/hello")
+    public ResponseEntity<String> hello(Authentication authentication) {
+        return ResponseEntity.ok(
+                "Hello ADMIN : " + authentication.getName()
+        );
+    }
+}
+package com.example.auth.controller;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.service.AuthService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/auth")
+public class AuthController {
+
+    private final AuthService authService;
+
+    // Constructor injection (NO Lombok)
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
+    // ---------- USER REGISTER ----------
+    @PostMapping("/register/user")
+    public ResponseEntity<String> registerUser(
+            @RequestBody RegisterRequestDTO request
+    ) {
+        authService.registerUser(request);
+        return ResponseEntity.ok("User registered successfully");
+    }
+
+    // ---------- OWNER REGISTER ----------
+    @PostMapping("/register/owner")
+    public ResponseEntity<String> registerOwner(
+            @RequestBody RegisterRequestDTO request
+    ) {
+        authService.registerOwner(request);
+        return ResponseEntity.ok("Owner registered successfully");
+    }
+
+    // ---------- ADMIN REGISTER ----------
+    @PostMapping("/register/admin")
+    public ResponseEntity<String> registerAdmin(
+            @RequestBody RegisterRequestDTO request
+    ) {
+        authService.registerAdmin(request);
+        return ResponseEntity.ok("Admin registered successfully");
+    }
+
+    // ---------- LOGIN ----------
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponseDTO> login(
+            @RequestBody LoginRequestDTO request
+    ) {
+        return ResponseEntity.ok(authService.login(request));
+    }
+}
+package com.example.auth.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+public class MeController {
+
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> me(Authentication authentication) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("email", authentication.getName());
+        response.put("roles", authentication.getAuthorities());
+
+        return ResponseEntity.ok(response);
+    }
+}
+package com.example.auth.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/owner")
+public class OwnerController {
+
+    @GetMapping("/hello")
+    public ResponseEntity<String> hello(Authentication authentication) {
+        return ResponseEntity.ok(
+                "Hello OWNER : " + authentication.getName()
+        );
+    }
+}
+package com.example.auth.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/user")
+public class UserController {
+
+    @GetMapping("/hello")
+    public ResponseEntity<String> hello(Authentication authentication) {
+        return ResponseEntity.ok(
+                "Hello USER : " + authentication.getName()
+        );
+    }
+}
+package com.example.auth.dto;
+
+public class AuthResponseDTO {
+
+    private String token;
+    private String role;
+
+    public AuthResponseDTO(String token, String role) {
+        this.token = token;
+        this.role = role;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
+    public String getRole() {
+        return role;
+    }
+}
+package com.example.auth.dto;
+
+public class LoginRequestDTO {
+
+    private String email;
+    private String password;
+
+    // ✅ GETTERS & SETTERS
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+package com.example.auth.dto;
+
+import com.example.auth.enums.Gender;
+import jakarta.validation.constraints.*;
+
+import java.time.LocalDate;
+
+public class RegisterRequestDTO {
+
+    @NotBlank
+    @Email
+    private String email;
+
+    @NotBlank
+    private String password;
+
+    @NotBlank
+    private String name;
+
+    @NotNull
+    private Gender gender;
+
+    @NotNull
+    @Past
+    private LocalDate dateOfBirth;
+
+    @NotBlank
+    private String phone;
+
+    // ========= GETTERS & SETTERS =========
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+    
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Gender getGender() {
+        return gender;
+    }
+
+    public void setGender(Gender gender) {
+        this.gender = gender;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+    
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+}
+package com.example.auth.entity;
+
+import com.example.auth.enums.Status;
+import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.Period;
+
+@Entity
+@Table(name = "admins")
+public class Admin extends BaseEntity {
+	  @Column(unique = true, nullable = false)
+    private String email;
+
+    @Column(nullable = false)
+    private String password;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Gender gender;
+
+    @Column(nullable = false)
+    private LocalDate dateOfBirth;
+
+    @Column(nullable = false)
+    private String phone;
+
+    @Enumerated(EnumType.STRING)
+    private Status status;
+
+    // ===== CALCULATED AGE (NOT STORED) =====
+    @Transient
+    public Integer getAge() {
+        return dateOfBirth == null
+                ? null
+                : Period.between(dateOfBirth, LocalDate.now()).getYears();
+    }
+
+    // ===== GETTERS & SETTERS =====
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+ 
+    public String getPassword() {
+        return password;
+    }
+ 
+    public void setPassword(String password) {
+        this.password = password;
+    }
+ 
+    public String getName() {
+        return name;
+    }
+ 
+    public void setName(String name) {
+        this.name = name;
+    }
+ 
+    public Gender getGender() {
+        return gender;
+    }
+ 
+    public void setGender(Gender gender) {
+        this.gender = gender;
+    }
+ 
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+ 
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+ 
+    public String getPhone() {
+        return phone;
+    }
+ 
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+ 
+    public Status getStatus() {
+        return status;
+    }
+ 
+    public void setStatus(Status status) {
+        this.status = status;
+    }
+}
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+
+@MappedSuperclass
+public abstract class BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+}
+package com.example.auth.entity;
+
+import com.example.auth.enums.Status;
+import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.Period;
+
+@Entity
+@Table(name = "owners")
+public class Owner extends BaseEntity {
+	  @Column(unique = true, nullable = false)
+    private String email;
+
+    @Column(nullable = false)
+    private String password;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Gender gender;
+
+    @Column(nullable = false)
+    private LocalDate dateOfBirth;
+
+    @Column(nullable = false)
+    private String phone;
+
+    @Enumerated(EnumType.STRING)
+    private Status status;
+
+    // ===== CALCULATED AGE (NOT STORED) =====
+    @Transient
+    public Integer getAge() {
+        return dateOfBirth == null
+                ? null
+                : Period.between(dateOfBirth, LocalDate.now()).getYears();
+    }
+
+    // ===== GETTERS & SETTERS =====
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+ 
+    public String getPassword() {
+        return password;
+    }
+ 
+    public void setPassword(String password) {
+        this.password = password;
+    }
+ 
+    public String getName() {
+        return name;
+    }
+ 
+    public void setName(String name) {
+        this.name = name;
+    }
+ 
+    public Gender getGender() {
+        return gender;
+    }
+ 
+    public void setGender(Gender gender) {
+        this.gender = gender;
+    }
+ 
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+ 
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+ 
+    public String getPhone() {
+        return phone;
+    }
+ 
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+ 
+    public Status getStatus() {
+        return status;
+    }
+ 
+    public void setStatus(Status status) {
+        this.status = status;
+    }
+}
+package com.example.auth.entity;
+
+import com.example.auth.enums.Status;
+import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.Period;
+
+@Entity
+@Table(name = "users")
+public class User extends BaseEntity {
+	  @Column(unique = true, nullable = false)
+    private String email;
+
+    @Column(nullable = false)
+    private String password;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Gender gender;
+
+    @Column(nullable = false)
+    private LocalDate dateOfBirth;
+
+    @Column(nullable = false)
+    private String phone;
+
+    @Enumerated(EnumType.STRING)
+    private Status status;
+
+    // ===== CALCULATED AGE (NOT STORED) =====
+    @Transient
+    public Integer getAge() {
+        return dateOfBirth == null
+                ? null
+                : Period.between(dateOfBirth, LocalDate.now()).getYears();
+    }
+
+    // ===== GETTERS & SETTERS =====
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+ 
+    public String getPassword() {
+        return password;
+    }
+ 
+    public void setPassword(String password) {
+        this.password = password;
+    }
+ 
+    public String getName() {
+        return name;
+    }
+ 
+    public void setName(String name) {
+        this.name = name;
+    }
+ 
+    public Gender getGender() {
+        return gender;
+    }
+ 
+    public void setGender(Gender gender) {
+        this.gender = gender;
+    }
+ 
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+ 
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+ 
+    public String getPhone() {
+        return phone;
+    }
+ 
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+ 
+    public Status getStatus() {
+        return status;
+    }
+ 
+    public void setStatus(Status status) {
+        this.status = status;
+    }
+}
+package com.example.auth.enums;
+
+public enum Role {
+    USER,
+    OWNER,
+    ADMIN
+}
+package com.example.auth.enums;
+
+public enum Status {
+    ACTIVE,
+    PENDING
+}
+package com.example.auth.enums;
+
+public enum Gender {
+    MALE,
+    FEMALE
+}
+
+package com.example.auth.exception;
+
+import java.time.LocalDateTime;
+
+public class ApiError {
+
+    private LocalDateTime timestamp;
+    private int status;
+    private String error;
+    private String message;
+    private String path;
+
+    public ApiError(int status, String error, String message, String path) {
+        this.timestamp = LocalDateTime.now();
+        this.status = status;
+        this.error = error;
+        this.message = message;
+        this.path = path;
+    }
+
+    public LocalDateTime getTimestamp() {
+        return timestamp;
+    }
+
+    public int getStatus() {
+        return status;
+    }
+
+    public String getError() {
+        return error;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public String getPath() {
+        return path;
+    }
+}
+package com.example.auth.exception;
+
+public class AuthException extends RuntimeException {
+
+    public AuthException(String message) {
+        super(message);
+    }
+}
+package com.example.auth.exception;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    // ===== VALIDATION ERRORS =====
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleValidation(
+            MethodArgumentNotValidException ex,
+            HttpServletRequest request
+    ) {
+        String message = ex.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                .findFirst()
+                .orElse("Validation error");
+
+        ApiError error = new ApiError(
+                HttpStatus.BAD_REQUEST.value(),
+                "Validation Failed",
+                message,
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.badRequest().body(error);
+    }
+
+    // ===== INVALID ENUM / BAD JSON =====
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleInvalidJson(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request
+    ) {
+        ApiError error = new ApiError(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                "Invalid request payload or enum value",
+                request.getRequestURI()
+        );
+        return ResponseEntity.badRequest().body(error);
+    }
+
+    // ===== AUTH ERRORS =====
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ApiError> handleBadCredentials(
+            BadCredentialsException ex,
+            HttpServletRequest request
+    ) {
+        ApiError error = new ApiError(
+                HttpStatus.UNAUTHORIZED.value(),
+                "Unauthorized",
+                "Invalid email or password",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(
+            AccessDeniedException ex,
+            HttpServletRequest request
+    ) {
+        ApiError error = new ApiError(
+                HttpStatus.FORBIDDEN.value(),
+                "Forbidden",
+                "Access denied",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    // ===== FALLBACK =====
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiError> handleGeneral(
+            Exception ex,
+            HttpServletRequest request
+    ) {
+        ApiError error = new ApiError(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "Internal Server Error",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+}
+package com.example.auth.exception;
+
+public class InvalidCredentialsException extends RuntimeException {
+
+    public InvalidCredentialsException(String message) {
+        super(message);
+    }
+}
+package com.example.auth.exception;
+
+public class ResourceAlreadyExistsException extends RuntimeException {
+
+    public ResourceAlreadyExistsException(String message) {
+        super(message);
+    }
+}
+package com.example.auth.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+@ResponseStatus(HttpStatus.UNAUTHORIZED)
+public class UnauthorizedException extends RuntimeException {
+
+	private static final long serialVersionUID = 1L;
+
+	public UnauthorizedException(String message) {
+        super(message);
+    }
+}
+package com.example.auth.repository;
+
+import com.example.auth.entity.Admin;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface AdminRepository extends JpaRepository<Admin, Long> {
+
+    Optional<Admin> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+}
+package com.example.auth.repository;
+
+import com.example.auth.entity.Owner;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface OwnerRepository extends JpaRepository<Owner, Long> {
+
+    Optional<Owner> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+}
+package com.example.auth.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.example.auth.entity.User;
+
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+}
+package com.example.auth.security.jwt;
+
+import com.example.auth.util.JwtConstants;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.List;
+
+@Component
+public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private final JwtUtil jwtUtil;
+
+    public JwtAuthFilter(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        String authHeader = request.getHeader(JwtConstants.AUTH_HEADER);
+
+        if (authHeader == null || !authHeader.startsWith(JwtConstants.TOKEN_PREFIX)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        String token = authHeader.substring(JwtConstants.TOKEN_PREFIX.length());
+
+        if (jwtUtil.validateToken(token)) {
+
+            String email = jwtUtil.extractEmail(token);
+            String role = jwtUtil.extractRole(token);
+
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(
+                            email,
+                            null,
+                            List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                    );
+
+            authentication.setDetails(
+                    new WebAuthenticationDetailsSource().buildDetails(request)
+            );
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
+package com.example.auth.security.jwt;
+
+import com.example.auth.util.JwtConstants;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+
+@Component
+public class JwtUtil {
+
+    private final SecretKey key;
+    private final long expirationTime;
+
+    public JwtUtil(
+            @Value("${jwt.secret}") String secret,
+            @Value("${jwt.expiration}") long expirationTime
+    ) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes());
+        this.expirationTime = expirationTime;
+    }
+
+    // ================= GENERATE TOKEN =================
+    public String generateToken(String email, String role) {
+        return Jwts.builder()
+                .setSubject(email)
+                .claim(JwtConstants.ROLE_CLAIM, role)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    // ================= VALIDATE TOKEN =================
+    public boolean validateToken(String token) {
+        try {
+            extractAllClaims(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public String extractEmail(String token) {
+        return extractAllClaims(token).getSubject();
+    }
+
+    public String extractRole(String token) {
+        return extractAllClaims(token).get(JwtConstants.ROLE_CLAIM, String.class);
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+}
+package com.example.auth.service;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+
+public interface AuthService {
+
+    void registerUser(RegisterRequestDTO request);
+
+    void registerOwner(RegisterRequestDTO request);
+
+    void registerAdmin(RegisterRequestDTO request);
+
+    AuthResponseDTO login(LoginRequestDTO request);
+
+    void logout(String refreshToken);
+}
+
+package com.example.auth.service.impl;
+
+import com.example.auth.dto.AuthResponseDTO;
+import com.example.auth.dto.LoginRequestDTO;
+import com.example.auth.dto.RegisterRequestDTO;
+import com.example.auth.entity.Admin;
+import com.example.auth.entity.Owner;
+import com.example.auth.entity.User;
+import com.example.auth.enums.Status;
+import com.example.auth.exception.AuthException;
+import com.example.auth.exception.InvalidCredentialsException;
+import com.example.auth.exception.ResourceAlreadyExistsException;
+import com.example.auth.repository.AdminRepository;
+import com.example.auth.repository.OwnerRepository;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.security.jwt.JwtUtil;
+import com.example.auth.service.AuthService;
+import com.example.auth.util.PasswordValidator;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.Period;
+
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final OwnerRepository ownerRepository;
+    private final AdminRepository adminRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            OwnerRepository ownerRepository,
+            AdminRepository adminRepository,
+            PasswordEncoder passwordEncoder,
+            JwtUtil jwtUtil
+    ) {
+        this.userRepository = userRepository;
+        this.ownerRepository = ownerRepository;
+        this.adminRepository = adminRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
+    }
+
+    // ================= REGISTER USER =================
+    @Override
+    public void registerUser(RegisterRequestDTO request) {
+        validateRegistration(request);
+        ensureEmailIsUnique(request.getEmail());
+
+        User user = new User();
+        mapDtoToUser(user, request);
+        user.setStatus(Status.ACTIVE);
+
+        userRepository.save(user);
+    }
+
+    // ================= REGISTER OWNER =================
+    @Override
+    public void registerOwner(RegisterRequestDTO request) {
+        validateRegistration(request);
+        ensureEmailIsUnique(request.getEmail());
+
+        Owner owner = new Owner();
+        mapDtoToOwner(owner, request);
+        owner.setStatus(Status.PENDING);
+
+        ownerRepository.save(owner);
+    }
+
+    // ================= REGISTER ADMIN =================
+    @Override
+    public void registerAdmin(RegisterRequestDTO request) {
+        validateRegistration(request);
+        ensureEmailIsUnique(request.getEmail());
+
+        Admin admin = new Admin();
+        mapDtoToAdmin(admin, request);
+        admin.setStatus(Status.ACTIVE);
+
+        adminRepository.save(admin);
+    }
+
+    // ================= LOGIN =================
+    @Override
+    public AuthResponseDTO login(LoginRequestDTO request) {
+
+        Admin admin = adminRepository.findByEmail(request.getEmail()).orElse(null);
+        if (admin != null && passwordEncoder.matches(request.getPassword(), admin.getPassword())) {
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(admin.getEmail(), "ADMIN"),
+                    "ADMIN"
+            );
+        }
+
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        if (user != null && passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(user.getEmail(), "USER"),
+                    "USER"
+            );
+        }
+
+        Owner owner = ownerRepository.findByEmail(request.getEmail()).orElse(null);
+        if (owner != null) {
+            if (!passwordEncoder.matches(request.getPassword(), owner.getPassword())) {
+                throw new InvalidCredentialsException("Invalid email or password");
+            }
+            if (owner.getStatus() != Status.ACTIVE) {
+                throw new AuthException("Owner account is not approved yet");
+            }
+            return new AuthResponseDTO(
+                    jwtUtil.generateToken(owner.getEmail(), "OWNER"),
+                    "OWNER"
+            );
+        }
+
+        throw new InvalidCredentialsException("Invalid email or password");
+    }
+
+    // ================= LOGOUT =================
+    /**
+     * JWT is stateless.
+     * For now, logout is handled client-side by deleting the token.
+     * (Refresh-token support can be added later)
+     */
+    @Override
+    public void logout(String token) {
+        // No-op for now (stateless JWT)
+    }
+
+    // ================= PRIVATE HELPERS =================
+
+    private void validateRegistration(RegisterRequestDTO request) {
+
+        if (!PasswordValidator.isValid(request.getPassword())) {
+            throw new AuthException(
+                    "Password must contain uppercase, lowercase, number and special character (min 8 chars)"
+            );
+        }
+
+        if (request.getGender() == null) {
+            throw new AuthException("Gender is required");
+        }
+
+        LocalDate dob = request.getDateOfBirth();
+        if (dob == null || dob.isAfter(LocalDate.now())) {
+            throw new AuthException("Valid date of birth required");
+        }
+
+        int age = Period.between(dob, LocalDate.now()).getYears();
+        if (age < 18) {
+            throw new AuthException("Must be at least 18 years old");
+        }
+    }
+
+    private void ensureEmailIsUnique(String email) {
+        if (userRepository.existsByEmail(email)
+                || ownerRepository.existsByEmail(email)
+                || adminRepository.existsByEmail(email)) {
+            throw new ResourceAlreadyExistsException("Email already exists");
+        }
+    }
+
+    private void mapDtoToUser(User user, RegisterRequestDTO dto) {
+        user.setEmail(dto.getEmail());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setName(dto.getName());
+        user.setGender(dto.getGender());
+        user.setDateOfBirth(dto.getDateOfBirth());
+        user.setPhone(dto.getPhone());
+    }
+
+    private void mapDtoToOwner(Owner owner, RegisterRequestDTO dto) {
+        owner.setEmail(dto.getEmail());
+        owner.setPassword(passwordEncoder.encode(dto.getPassword()));
+        owner.setName(dto.getName());
+        owner.setGender(dto.getGender());
+        owner.setDateOfBirth(dto.getDateOfBirth());
+        owner.setPhone(dto.getPhone());
+    }
+
+    private void mapDtoToAdmin(Admin admin, RegisterRequestDTO dto) {
+        admin.setEmail(dto.getEmail());
+        admin.setPassword(passwordEncoder.encode(dto.getPassword()));
+        admin.setName(dto.getName());
+        admin.setGender(dto.getGender());
+        admin.setDateOfBirth(dto.getDateOfBirth());
+        admin.setPhone(dto.getPhone());
+    }
+}
+package com.example.auth.util;
+
+import java.util.regex.Pattern;
+
+public final class PasswordValidator {
+
+    private PasswordValidator() {}
+
+    // Min 8 chars, upper, lower, digit, special char
+    private static final Pattern PASSWORD_PATTERN = Pattern.compile(
+            "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"
+    );
+
+    public static boolean isValid(String password) {
+        return PASSWORD_PATTERN.matcher(password).matches();
+    }
+}
+package com.example.auth.util;
+
+public final class JwtConstants {
+
+    private JwtConstants() {}
+
+    public static final String ROLE_CLAIM = "role";
+    public static final String TOKEN_PREFIX = "Bearer ";
+    public static final String AUTH_HEADER = "Authorization";
+}
+======================================================================
+package com.example.auth.controller;
+
+import com.example.auth.enums.Status;
+import com.example.auth.repository.OwnerRepository;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/admin")
+public class AdminApprovalController {
+
+    private final OwnerRepository ownerRepository;
+
+    public AdminApprovalController(OwnerRepository ownerRepository) {
+        this.ownerRepository = ownerRepository;
+    }
+
+    @PutMapping("/approve-owner/{email}")
+    public ResponseEntity<String> approveOwner(@PathVariable String email) {
+
+        var owner = ownerRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Owner not found"));
+
+        owner.setStatus(Status.ACTIVE);
+        ownerRepository.save(owner);
+
+        return ResponseEntity.ok("Owner approved successfully");
+    }
+}
+================================================================

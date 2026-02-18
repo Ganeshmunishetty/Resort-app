@@ -1,0 +1,142 @@
+✅ Microservices List
+1️⃣ Auth Service ✅ (COMPLETED – current service)
+
+Purpose
+
+User / Owner / Admin registration
+
+Login & JWT generation
+
+JWT validation
+
+Role-based authorization (USER, OWNER, ADMIN)
+
+Key Features
+
+Spring Security + JWT
+
+Stateless authentication
+
+BCrypt password encoding
+
+Global exception handling
+
+Status:
+✅ Coding completed
+⏳ Testing pending (Postman / API testing)
+
+2️⃣ User Service 🔜
+
+Purpose
+
+Manage USER profile data
+
+User-specific operations
+
+Responsibilities
+
+Get user profile
+
+Update profile
+
+User dashboard APIs
+
+Security
+
+Accessible only to ROLE_USER
+
+JWT required
+
+3️⃣ Owner Service 🔜
+
+Purpose
+
+Manage OWNER-related business logic
+
+Responsibilities
+
+Owner profile
+
+Approval status handling (PENDING → ACTIVE)
+
+Owner dashboard APIs
+
+Security
+
+Accessible only to ROLE_OWNER
+
+JWT required
+
+Admin approval dependency
+
+4️⃣ Admin Service 🔜
+
+Purpose
+
+System administration
+
+Responsibilities
+
+Approve / reject owners
+
+View users & owners
+
+Admin-level management APIs
+
+Security
+
+Accessible only to ROLE_ADMIN
+
+JWT required
+
+5️⃣ Gateway Service (API Gateway) 🔜 (Recommended)
+
+Purpose
+
+Single entry point for all microservices
+
+Responsibilities
+
+Route requests to services
+
+Centralized authentication
+
+Token forwarding
+
+Rate limiting (optional)
+
+Tech
+
+Spring Cloud Gateway
+
+6️⃣ Service Discovery (Optional but Professional) 🔜
+
+Purpose
+
+Dynamic service registration & discovery
+
+Tech
+
+Eureka Server or Consul
+
+7️⃣ Config Service (Optional) 🔜
+
+Purpose
+
+Centralized configuration management
+
+Tech
+
+Spring Cloud Config
+
+📌 Minimal Required Set (For Interviews / Production MVP)
+
+If you want a clean, strong microservices project without overengineering:
+
+✅ Auth Service
+✅ User Service
+✅ Owner Service
+✅ Admin Service
+✅ API Gateway
+
+That’s perfectly acceptable and professional.
