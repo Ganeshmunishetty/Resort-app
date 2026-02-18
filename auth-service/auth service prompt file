@@ -1,0 +1,145 @@
+You are a senior Spring Boot microservices architect.
+
+I want you to generate a COMPLETE, CONSISTENT, and WORKING
+JWT-based Auth Microservice in Spring Boot.
+
+IMPORTANT RULES:
+1. This is NOT a demo or sample — treat it as a real project.
+2. The service is functionally complete but not yet deployed to production.
+3. No temporary fixes, no partial code, no assumptions.
+4. Every interface must be fully implemented.
+5. Every error previously faced must already be resolved.
+6. Do NOT change architecture unless absolutely required.
+7. Output files ONE BY ONE when I say "next".
+
+-------------------------------------------------
+PROJECT REQUIREMENTS
+-------------------------------------------------
+
+• Architecture: Spring Boot, REST, Microservice
+• Authentication: JWT (stateless)
+• Authorization: Role-based (USER, OWNER, ADMIN)
+• Database: MySQL
+• ORM: Spring Data JPA
+• Security: Spring Security (no default password)
+• Documentation: Swagger (springdoc-openapi)
+
+-------------------------------------------------
+FUNCTIONAL FEATURES
+-------------------------------------------------
+
+1. USER REGISTRATION
+   - Email must be unique
+   - Strong password validation
+   - Status = ACTIVE by default
+
+2. OWNER REGISTRATION
+   - Status = PENDING
+   - Cannot login until approved by ADMIN
+
+3. ADMIN REGISTRATION
+   - Direct ACTIVE status
+
+4. LOGIN
+   - JWT generation
+   - Role embedded in token
+   - OWNER login blocked if status != ACTIVE
+
+5. LOGOUT
+   - Stateless (frontend deletes token)
+   - Method must exist but no session invalidation
+
+6. ROLE-BASED ACCESS
+   - /user/** → USER
+   - /owner/** → OWNER
+   - /admin/** → ADMIN
+
+7. ADMIN OWNER APPROVAL
+   - Admin can approve OWNER accounts
+
+8. /me endpoint
+   - Returns authenticated user info from JWT
+
+-------------------------------------------------
+TECHNICAL CONSTRAINTS
+-------------------------------------------------
+
+• No refresh token persistence (future-ready DTO allowed)
+• JWT secret from application.properties
+• No circular dependencies
+• Global exception handling
+• Clean separation of layers
+• No duplicate Spring beans
+• No generated security password
+• CSRF disabled (stateless API)
+
+-------------------------------------------------
+PROJECT STRUCTURE
+-------------------------------------------------
+
+Generate the FULL PROJECT including:
+
+1. pom.xml
+2. application.properties
+3. Main application class
+4. Config classes
+   - SecurityConfig
+   - CorsConfig
+   - PasswordEncoderConfig
+   - SwaggerConfig
+5. Controllers
+   - AuthController
+   - UserController
+   - OwnerController
+   - AdminController
+   - AdminApprovalController
+   - MeController
+6. Services & Implementations
+   - AuthService
+   - AuthServiceImpl
+7. DTOs
+   - RegisterRequestDTO
+   - LoginRequestDTO
+   - AuthResponseDTO
+   - TokenRefreshResponse
+8. Entities
+   - BaseEntity
+   - User
+   - Owner
+   - Admin
+9. Enums
+   - Status
+   - Gender
+10. Repositories
+    - UserRepository
+    - OwnerRepository
+    - AdminRepository
+11. Security / JWT
+    - JwtAuthFilter
+    - JwtUtil
+    - JwtConstants
+12. Exceptions
+    - GlobalExceptionHandler
+    - ApiError
+    - AuthException
+    - InvalidCredentialsException
+    - ResourceAlreadyExistsException
+    - UnauthorizedException
+13. Utilities
+    - PasswordValidator
+
+-------------------------------------------------
+OUTPUT INSTRUCTIONS
+-------------------------------------------------
+
+• Start with PROJECT DIRECTORY STRUCTURE
+• Then output files ONE BY ONE
+• Each file must be COMPLETE and COMPILABLE
+• Do NOT skip any class
+• Do NOT summarize code
+• Wait for me to type "next" before sending the next file
+
+This project must start successfully and all endpoints
+must be testable via Postman without errors.
+
+BEGIN.
